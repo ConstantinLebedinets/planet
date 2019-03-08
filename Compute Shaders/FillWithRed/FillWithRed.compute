@@ -1,0 +1,60 @@
+﻿#pragma kernel KernelFunction_A
+#pragma kernel KernelFunction_B
+#pragma kernel KernelFunction_C
+
+RWTexture2D<float4> textureBuffer;
+
+[numthreads(8, 8, 1)]
+void KernelFunction_A(uint3 dispatchThreadID : SV_DispatchThreadID)
+{
+    // SV_DispathThreadID は、SV_Group_ID * numthreads + GroupThreadID です。
+
+    float width, height;
+    textureBuffer.GetDimensions(width, height);
+
+    textureBuffer[dispatchThreadID.xy] = float4(dispatchThreadID.x / width,
+                                                dispatchThreadID.x / width,
+                                                dispatchThreadID.x / width,
+                                                1);
+}
+
+[numthreads(8, 8, 1)]
+void KernelFunction_B(uint3 dispatchThreadID : SV_DispatchThreadID)
+{
+    float width, height;
+    textureBuffer.GetDimensions(width, height);
+
+    textureBuffer[dispatchThreadID.xy] = float4(dispatchThreadID.y / width,
+                                                dispatchThreadID.y / width,
+                                                dispatchThreadID.y / width,
+                                                1);
+}
+
+
+[numthreads(8, 8, 1)]
+void KernelFunction_C(uint3 dispatchThreadID : SV_DispatchThreadID)
+{
+    float width, height;
+    textureBuffer.GetDimensions(width, height);
+	 textureBuffer[dispatchThreadID.xy] = float4(1,0,0,1);
+	 if(dispatchThreadID.y / width >= 0.49f
+	 && dispatchThreadID.y / width <= 0.51f){
+		textureBuffer[dispatchThreadID.xy] = float4(0,1,1,1);
+	 }
+	 if(dispatchThreadID.x / width >= 0.49f
+	 && dispatchThreadID.x / width <= 0.51f){
+		textureBuffer[dispatchThreadID.xy] = float4(1,1,0,1);
+	 }
+	 if(dispatchThreadID.x / width >= dispatchThreadID.y / width - 0.01f
+	 && dispatchThreadID.x / width <= dispatchThreadID.y / width + 0.01f){
+		textureBuffer[dispatchThreadID.xy] = float4(1,0,1,1);
+	 }
+
+	float x=dispatchThreadID.x / width-0.5f;
+	float y=dispatchThreadID.y / width-0.5f;
+	float radius = 0.25f;
+
+	if( x*x+y*y >= 0.0625 && x*x+y*y <= 0.0725 ){textureBuffer[dispatchThreadID.xy] = float4(1,0,1,1);}
+
+
+}

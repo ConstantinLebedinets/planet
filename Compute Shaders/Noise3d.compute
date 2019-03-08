@@ -1,0 +1,85 @@
+﻿#pragma kernel KernelFunction_A
+
+
+RWTexture2D<float4> textureBuffer;
+RWStructuredBuffer<uint> randData: register(u0);// длина 512
+
+uint rand(uint x, uint y, uint z)
+{
+		uint x0 =(256+(x%256))%256;
+		uint y0 =(256+(y%256))%256;
+		uint z0 =(256+(z%256))%256;	
+		return randData[ x0 + randData[ y0 + randData[ z0 ] ] ]; 	
+}
+
+float fade(float t) {
+ 		return t*t*t*(t*(t*6-15)+10);
+	}
+
+float noise(float3 pos){
+		uint x0 = floor(pos.x);
+		uint y0 = floor(pos.y);
+		uint z0 = floor(pos.z);
+		//смещение внутри ячейки
+		float dx = pos.x-x0;
+		float dy = pos.y-y0;
+		float dz = pos.z-z0;
+		//читаю 8 точек из фэйкового рандома
+		uint x000 = rand(x0,y0,z0);
+		uint x001 = rand(x0,y0,z0+1);
+		uint x010 = rand(x0,y0+1,z0);
+		uint x011 = rand(x0,y0+1,z0+1);
+		uint x100 = rand(x0+1,y0,z0);
+		uint x101 = rand(x0+1,y0,z0+1);
+		uint x110 = rand(x0+1,y0+1,z0);
+		uint x111 = rand(x0+1,y0+1,z0+1);	
+		//смешиваю
+		float dif00 = lerp(x000,x001,fade(dz));
+		float dif01 = lerp(x010,x011,fade(dz));
+		float dif10 = lerp(x100,x101,fade(dz));
+		float dif11 = lerp(x110,x111,fade(dz));
+		
+		float diff0 = lerp(dif00,dif01,fade(dy));
+		float diff1 = lerp(dif10,dif11,fade(dy));
+		
+		return lerp(diff0,diff1,fade(dx))*0.0039215686274509803921568627451f;
+	}
+
+
+[numthreads(8, 8, 1)]
+void KernelFunction_A(uint3 dispatchThreadID : SV_DispatchThreadID)
+{
+    // SV_DispathThreadID は、SV_Group_ID * numthreads + GroupThreadID です。
+
+    float width, height;
+    textureBuffer.GetDimensions(width, height);
+
+    textureBuffer[dispatchThreadID.xy] = float4(dispatchThreadID.x / width,
+                                                dispatchThreadID.x / width,
+                                                dispatchThreadID.x / width,
+                                                1);
+	uint x1 = dispatchThreadID.x;
+	uint y1 = dispatchThreadID.y;
+	uint z1 = dispatchThreadID.z;
+	float value = rand(x1,y1,z1);
+	//textureBuffer[dispatchThreadID.xy] =float4(x/width,y/width,z/width,1);
+	float Noise = noise(dispatchThreadID.xyz*0.05f);
+	textureBuffer[dispatchThreadID.xy] =float4(Noise,Noise,Noise,1);
+
+
+float x=dispatchThreadID.x / width-0.5f;
+	float y=dispatchThreadID.y / width-0.5f;
+	float radius = 0.25f;
+
+	if( x*x+y*y >= 0.0625 && x*x+y*y <= 0.065 ){textureBuffer[dispatchThreadID.xy] = float4(15,0,13,1);}
+	if(
+		dispatchThreadID.x<=3 ||
+		dispatchThreadID.x>=width-4 ||
+		dispatchThreadID.y<=3 ||
+		dispatchThreadID.y>=width-4
+	){
+		textureBuffer[dispatchThreadID.xy] = float4(0.5,0.32,0.1,1);
+	}
+
+}
+
