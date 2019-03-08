@@ -1,8 +1,8 @@
-﻿#pragma kernel KernelFunction_A
+#pragma kernel KernelFunction_A
 
 
 RWTexture2D<float4> textureBuffer;
-RWStructuredBuffer<uint> randData: register(u0);// длина 512
+RWStructuredBuffer<uint> randData: register(u0);// длина 512 фэйковый рандом
 
 uint rand(uint x, uint y, uint z)
 {
@@ -16,7 +16,7 @@ float fade(float t) {
  		return t*t*t*(t*(t*6-15)+10);
 	}
 
-float noise(float3 pos){
+float noise(float3 pos){//градиентный шум как он есть.
 		uint x0 = floor(pos.x);
 		uint y0 = floor(pos.y);
 		uint z0 = floor(pos.z);
@@ -45,6 +45,16 @@ float noise(float3 pos){
 		return lerp(diff0,diff1,fade(dx))*0.0039215686274509803921568627451f;
 	}
 
+float getHeight(float3 pos){// summing of noise octaves untill it become nice enought
+		uint numberOfOctaves = 9;
+		float sum = 0;		
+		for(uint i = 1; i<=numberOfOctaves; i++){
+			sum = sum + pow((2 * noise( pos * i * i ) - 1),1)/i;
+		}
+		return 0.5f+0.05f*sum;
+	}
+
+
 
 [numthreads(8, 8, 1)]
 void KernelFunction_A(uint3 dispatchThreadID : SV_DispatchThreadID)
@@ -54,20 +64,14 @@ void KernelFunction_A(uint3 dispatchThreadID : SV_DispatchThreadID)
     float width, height;
     textureBuffer.GetDimensions(width, height);
 
-    textureBuffer[dispatchThreadID.xy] = float4(dispatchThreadID.x / width,
-                                                dispatchThreadID.x / width,
-                                                dispatchThreadID.x / width,
-                                                1);
-	uint x1 = dispatchThreadID.x;
-	uint y1 = dispatchThreadID.y;
-	uint z1 = dispatchThreadID.z;
-	float value = rand(x1,y1,z1);
-	//textureBuffer[dispatchThreadID.xy] =float4(x/width,y/width,z/width,1);
-	float Noise = noise(dispatchThreadID.xyz*0.05f);
-	textureBuffer[dispatchThreadID.xy] =float4(Noise,Noise,Noise,1);
+
+	float Noise = getHeight(dispatchThreadID.xyz*0.005f);
+	if(Noise>0.5f){	textureBuffer[dispatchThreadID.xy] =float4(Noise*0.5,Noise*0.75,Noise*0.25,1);}
+	else{textureBuffer[dispatchThreadID.xy] =float4(Noise*0.25,Noise*0.5,Noise*2,1);}
 
 
-float x=dispatchThreadID.x / width-0.5f;
+	//just to show that still all fine
+	float x=dispatchThreadID.x / width-0.5f;
 	float y=dispatchThreadID.y / width-0.5f;
 	float radius = 0.25f;
 
@@ -82,4 +86,3 @@ float x=dispatchThreadID.x / width-0.5f;
 	}
 
 }
-
