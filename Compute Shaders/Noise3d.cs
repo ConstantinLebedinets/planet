@@ -1,4 +1,4 @@
-﻿using System.Collections;
+using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 
@@ -47,7 +47,7 @@ public class Noise3d : MonoBehaviour
         this.init(125);
 
 
-        this.renderTexture_A = new RenderTexture(512, 512, 0, RenderTextureFormat.ARGB32);
+        this.renderTexture_A = new RenderTexture(1024, 1024, 0, RenderTextureFormat.ARGB32);
         this.renderTexture_A.enableRandomWrite = true;
         this.renderTexture_A.Create();
 
