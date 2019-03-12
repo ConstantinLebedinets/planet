@@ -1,0 +1,84 @@
+﻿#pragma kernel KernelFunction_A
+float4 _SinTime, _Time;
+
+RWTexture2D<float4> textureBuffer;
+//RWStructuredBuffer<uint> randData: register(u0);// длина 512 фэйковый рандом
+float rand(float n){return frac(sin(n) * 43758.5453123);}
+
+float rand(float2 c){
+	return frac(sin(dot(c.xy ,float2(12.9898f,78.233f))) * 43758.5453f);
+}
+
+float rand(float3 c){
+	return frac(sin(dot(c.xyz ,float3(12.9898f,78.233f,165.6784f))) * 43758.5453f);
+}
+
+
+float fade(float t) {
+ 		return t*t*t*(t*(t*6-15)+10);
+	}
+
+float noise(float3 pos){//градиентный шум как он есть.
+		uint x0 = floor(pos.x);
+		uint y0 = floor(pos.y);
+		uint z0 = floor(pos.z);
+		//смещение внутри ячейки
+		float dx = pos.x-x0;
+		float dy = pos.y-y0;
+		float dz = pos.z-z0;
+		//читаю 8 точек из фэйкового рандома
+		float x000 = rand(float3(x0,y0,z0));
+		float x001 = rand(float3(x0,y0,z0+1));
+		float x010 = rand(float3(x0,y0+1,z0));
+		float x011 = rand(float3(x0,y0+1,z0+1));
+		float x100 = rand(float3(x0+1,y0,z0));
+		float x101 = rand(float3(x0+1,y0,z0+1));
+		float x110 = rand(float3(x0+1,y0+1,z0));
+		float x111 = rand(float3(x0+1,y0+1,z0+1));	
+		//смешиваю
+
+		float dif00 = x000*fade(1-dz)+x001*fade(dz);
+		float dif01 = x010*fade(1-dz)+x011*fade(dz);
+		float diff0 = dif00*fade(1-dy)+dif01*fade(dy);
+
+		float dif10 = x100*fade(1-dz)+x101*fade(dz);
+		float dif11 = x110*fade(1-dz)+x111*fade(dz);
+		float diff1 = dif10*fade(1-dy)+dif11*fade(dy);
+		
+		float result = diff0*fade(1-dx)+diff1*fade(dx);//(0...1)
+		return result;
+	}
+
+
+float getHeight(float3 pos){// summing of noise octaves untill it become nice enought
+		uint numberOfOctaves = 10;
+		float sum = 0;		
+		for(uint i = 1; i<=numberOfOctaves; i++){
+
+			float cVal = noise( pos*pow(2,i))/pow(2,i);//аля ряд сходящийся к единице
+
+			sum = sum + cVal;
+			//sum = sum + noise( pos*pow(2,i))/pow(2,i);
+
+		//sum = sum + pow(4*noise( pos*pow(2,i))-2,3)/(pow(2,i)*8);
+		}
+
+		sum = sum;//*sum*sum;
+		if(sum>1)sum=0;
+		return sum;
+	}
+
+
+
+[numthreads(8, 8, 1)]
+void KernelFunction_A(uint3 dispatchThreadID : SV_DispatchThreadID)
+{
+       float width, height;
+    textureBuffer.GetDimensions(width, height);
+	float Noise = getHeight(dispatchThreadID.xyz*0.001f+float3(15,15,15+_Time.y));
+	if(Noise>0.5f){	textureBuffer[dispatchThreadID.xy] =float4(Noise*0.5,Noise*0.75,Noise*0.25,1);}
+	else{textureBuffer[dispatchThreadID.xy] =float4(Noise*0.25,Noise*0.5,Noise*2,1);}
+
+
+}
+

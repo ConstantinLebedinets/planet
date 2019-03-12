@@ -1,0 +1,130 @@
+﻿#pragma kernel KernelFunction_A
+
+
+RWTexture2D<float4> textureBuffer;
+RWStructuredBuffer<uint> randData: register(u0);// длина 512 фэйковый рандом
+
+uint rand(uint x, uint y, uint z)
+{
+		uint x0 =(256+(x%256))%256;
+		uint y0 =(256+(y%256))%256;
+		uint z0 =(256+(z%256))%256;	
+		return randData[ x0 + randData[ y0 + randData[ z0 ] ] ]; 	
+}
+
+float fade(float t) {
+ 		return t*t*t*(t*(t*6-15)+10);
+	}
+
+float noise(float3 pos){//градиентный шум как он есть.
+		uint x0 = floor(pos.x);
+		uint y0 = floor(pos.y);
+		uint z0 = floor(pos.z);
+		//смещение внутри ячейки
+		float dx = pos.x-x0;
+		float dy = pos.y-y0;
+		float dz = pos.z-z0;
+		//читаю 8 точек из фэйкового рандома
+		uint x000 = rand(x0,y0,z0);
+		uint x001 = rand(x0,y0,z0+1);
+		uint x010 = rand(x0,y0+1,z0);
+		uint x011 = rand(x0,y0+1,z0+1);
+		uint x100 = rand(x0+1,y0,z0);
+		uint x101 = rand(x0+1,y0,z0+1);
+		uint x110 = rand(x0+1,y0+1,z0);
+		uint x111 = rand(x0+1,y0+1,z0+1);	
+		//смешиваю
+		float dif00 = lerp(x000,x001,fade(dz));
+		float dif01 = lerp(x010,x011,fade(dz));
+		float dif10 = lerp(x100,x101,fade(dz));
+		float dif11 = lerp(x110,x111,fade(dz));
+		
+		float diff0 = lerp(dif00,dif01,fade(dy));
+		float diff1 = lerp(dif10,dif11,fade(dy));
+		
+		return lerp(diff0,diff1,fade(dx))*0.001953125f;//вывод (0...1)
+	}
+
+
+
+
+float weight(float3 pos)
+	{// приходит внутри куба расстояние до вершины
+	//имеем вектор идуший от вершины к точке, по самой длинной координате можно понять в какую грань вектор идет
+	//и если увеличить вектор так чтобы его максимальная координата стала единицей то он коснется грани к которой идет
+	//но при этом продолжин проходить через точку. И длины векторов будут соотносится в том же отношении, что и 
+	//стороны у этих треугольников у которых нам известны диагональ(первый вектор) и вектор умноженный на переменную так что
+	//бы одна из его максимальных координат стала равной единице
+
+	float Length = length(pos);
+	//ищем какая координата больше
+		float maxCx = abs(pos.x);
+		float maxCy = abs(pos.y);
+		float maxCz = abs(pos.z);
+		float maxC = 0.0f;
+		if(maxCx>=maxCy && maxCx>=maxCz){maxC=maxCx;}
+		if(maxCy>=maxCz && maxCy>=maxCx){maxC=maxCy;}
+		if(maxCz>=maxCx && maxCz>=maxCy){maxC=maxCz;}
+		// теперь вычисляем насколько надо умножить вектор чтобы он коснулся грани
+		// так же получается что эта максимальная координата и есть сооношение вектора идущего через точку к грани и до точки
+
+		return 1-maxC;
+	} 
+
+float BetterNoise(float3 pos){//градиентный шум как он есть.
+		uint x0 = floor(pos.x);
+		uint y0 = floor(pos.y);
+		uint z0 = floor(pos.z);
+		//смещение внутри ячейки
+		float dx = pos.x-x0;
+		float dy = pos.y-y0;
+		float dz = pos.z-z0;
+		//читаю 8 точек из фэйкового рандома значение их 0 512
+		//для каждой точки вычисляю вес как единица минус расстояние деленное на корень из двух
+		//так количество коэффициента может быть больше единицы то надо будет нормализовать это
+		//к виду в котором сумма весов 8  векторов будет 1
+		uint x000 = rand(x0,y0,z0);
+		float weight000 = weight(float3(dx,dy,dz));
+		uint x001 = rand(x0,y0,z0+1);
+		float weight001 = weight(float3(dx,dy,1-dz));
+		uint x010 = rand(x0,y0+1,z0);
+		float weight010 = weight(float3(dx,1-dy,dz));
+		uint x011 = rand(x0,y0+1,z0+1);
+		float weight011 = weight(float3(dx,1-dy,1-dz));
+		uint x100 = rand(x0+1,y0,z0);
+		float weight100 = weight(float3(1-dx,dy,dz));
+		uint x101 = rand(x0+1,y0,z0+1);
+		float weight101 = weight(float3(1-dx,dy,1-dz));
+		uint x110 = rand(x0+1,y0+1,z0);
+		float weight110 = weight(float3(1-dx,1-dy,dz));
+		uint x111 = rand(x0+1,y0+1,z0+1);	
+		float weight111 = weight(float3(1-dx,1-dy,1-dz));
+
+		float wholeSum= weight000+weight001+weight010+weight011+weight100+weight101+weight110+weight111;
+		//смешиваю
+
+		float sum = weight000*x000+weight001*x001+weight010*x010+weight011*x011+weight100*x100+weight101*x101+weight110*x110+weight111*x111;
+
+		return 0.001953125f*sum/wholeSum;//вывод (0...1)
+	}
+
+
+
+
+
+[numthreads(8, 8, 1)]
+void KernelFunction_A(uint3 dispatchThreadID : SV_DispatchThreadID)
+{
+    // SV_DispathThreadID は、SV_Group_ID * numthreads + GroupThreadID です。
+
+    float width, height;
+    textureBuffer.GetDimensions(width, height);
+	float Noise = getHeight(dispatchThreadID.xyz*0.005f);
+	if(Noise>0.5f){	textureBuffer[dispatchThreadID.xy] =float4(Noise*0.5,Noise*0.75,Noise*0.25,1);}
+	else{textureBuffer[dispatchThreadID.xy] =float4(Noise*0.25,Noise*0.5,Noise*2,1);}
+
+	Noise = BetterNoise(dispatchThreadID.xyz*0.005f);
+	textureBuffer[dispatchThreadID.xy] =float4(Noise,Noise,Noise,1);
+}
+
+
