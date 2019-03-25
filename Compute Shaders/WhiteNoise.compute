@@ -2,6 +2,7 @@
 float4 _SinTime, _Time;
 
 RWTexture2D<float4> textureBuffer;
+RWStructuredBuffer<float> heights;
 //RWStructuredBuffer<uint> randData: register(u0);// длина 512 фэйковый рандом
 float rand(float n){return frac(sin(n) * 43758.5453123);}
 
@@ -75,10 +76,22 @@ void KernelFunction_A(uint3 dispatchThreadID : SV_DispatchThreadID)
 {
        float width, height;
     textureBuffer.GetDimensions(width, height);
-	float Noise = getHeight(dispatchThreadID.xyz*0.001f+float3(15,15,15+_Time.y));
+	float3 coords = dispatchThreadID.xyz / width; // and dispalcment from zero, cos in zero it ruins
+	
+	float Noise = getHeight(float3(coords.x, coords.y, 1));
 	if(Noise>0.5f){	textureBuffer[dispatchThreadID.xy] =float4(Noise*0.5,Noise*0.75,Noise*0.25,1);}
 	else{textureBuffer[dispatchThreadID.xy] =float4(Noise*0.25,Noise*0.5,Noise*2,1);}
-
-
+	uint index0 = dispatchThreadID.x * 1024 + dispatchThreadID.y;//ВЕРХНЯЯ ГРАНЬ четко  upperface
+	heights[index0]= getHeight(float3(coords.x, coords.y,1));
+	uint index1 = dispatchThreadID.x * 1024 + dispatchThreadID.y + 1024 * 1024;//south face четко
+	heights[index1] = getHeight(float3(0, coords.y, coords.x));
+	uint index2 = dispatchThreadID.x * 1024 + dispatchThreadID.y + 2 * 1024 * 1024;//yeast//x0Z
+	heights[index2] = getHeight(float3(coords.x, 1, coords.y));
+	uint index3 = dispatchThreadID.x * 1024 + dispatchThreadID.y + 3 * 1024 * 1024;//нижняя грань bottomface
+	heights[index3] = getHeight(float3(coords.x, coords.y, 0));
+	uint index4 = dispatchThreadID.x * 1024 + dispatchThreadID.y + 4 * 1024 * 1024;//NorthFace четко
+	heights[index4] = getHeight(float3(1, coords.y, coords.x));
+	uint index5 = dispatchThreadID.x * 1024 + dispatchThreadID.y + 5 * 1024 * 1024;//west//x1Z
+	heights[index5] = getHeight(float3(coords.x, 0, coords.y));
 }
 
